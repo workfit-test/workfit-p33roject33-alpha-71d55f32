@@ -1,0 +1,32 @@
+
+services:
+
+  frontend:
+    image: moshady21/nginx:alpine
+    container_name: frontend
+    ports:
+      - "8080:80"
+    networks:
+      - my-network
+
+  backend:
+    image: moshady21/backend-image:1.0
+    container_name: backend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongo
+    networks:
+      - my-network
+
+  mongo:
+    image: moshady21/mongo 
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    driver: bridge
