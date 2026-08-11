@@ -1,0 +1,1080 @@
+{
+  "name": "AI GitHub Code Review System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-code-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3f6f3510-99b9-4198-8cbf-849a3b9f1ac9",
+      "name": "Review Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        304
+      ],
+      "webhookId": "1d997b77-f49d-4abb-820e-b41ae788f8fe"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst body = (j && j.body) ? j.body : (j || {});\nconst organization = body.organization || '';\nconst repository = body.repository || '';\nconst branch = body.branch || '';\nconst commitSha = body.commitSha || '';\nconst pullRequestNumber = (body.pullRequestNumber === undefined) ? null : body.pullRequestNumber;\nconst missingFields = [];\nif (!organization) missingFields.push('organization');\nif (!repository) missingFields.push('repository');\nif (!branch) missingFields.push('branch');\nif (!commitSha) missingFields.push('commitSha');\nconst valid = missingFields.length === 0;\nreturn [{ json: { valid, missingFields, organization, repository, branch, commitSha, pullRequestNumber } }];"
+      },
+      "id": "d219948e-07d0-423c-a1a5-4afb96b5fc19",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.valid }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "valid"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "invalid"
+        }
+      },
+      "id": "0821f80c-b51d-41f7-96ba-b92c3a2726dd",
+      "name": "Valid Input?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SsaprlvvEN5l4yAM",
+          "cachedResultName": "repo_metadata_cache"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cache_key",
+              "keyValue": "={{ $json.organization }}/{{ $json.repository }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "1621debc-884f-4257-8f94-52cd0a4dd1bf",
+      "name": "Get Cached Metadata",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        208
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ error: \"Missing required fields\", missingFields: $json.missingFields }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "30a02477-bdea-4d63-a03a-e5380d35fa20",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && r.cache_key);\nconst v = $('Validate Input').first().json;\nlet cacheHit = false;\nlet cachedMetadata = null;\nlet defaultBranch = '';\nif (rows.length > 0) {\n  const row = rows[0];\n  const cachedAt = row.cached_at ? new Date(row.cached_at).getTime() : 0;\n  const ageMs = Date.now() - cachedAt;\n  if (cachedAt > 0 && ageMs < 24 * 60 * 60 * 1000) {\n    cacheHit = true;\n    cachedMetadata = row.metadata_json || null;\n    defaultBranch = row.default_branch || '';\n  }\n}\nreturn [{ json: {\n  cacheHit, cachedMetadata, defaultBranch,\n  cacheKey: (v.organization || '') + '/' + (v.repository || ''),\n  organization: v.organization, repository: v.repository, branch: v.branch,\n  commitSha: v.commitSha, pullRequestNumber: v.pullRequestNumber\n} }];"
+      },
+      "id": "a4755f63-61cf-40d4-970b-431008a2659d",
+      "name": "Evaluate Cache",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hit",
+              "leftValue": "={{ $json.cacheHit }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ee45e4e0-5080-4c41-8c2e-ab2d5a6b51fe",
+      "name": "Cache Fresh?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $('Validate Input').item.json.organization }}/{{ $('Validate Input').item.json.repository }}/commits/{{ $('Validate Input').item.json.commitSha }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "X-GitHub-Api-Version",
+              "value": "2022-11-28"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c8ce2d6a-4f76-4207-b613-fc18ab500754",
+      "name": "Fetch Commit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        208
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "githubApi": {
+          "id": "iUWQaqPlnAjlkmps",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $('Validate Input').item.json.organization }}/{{ $('Validate Input').item.json.repository }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "X-GitHub-Api-Version",
+              "value": "2022-11-28"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "id": "8821e18a-8cdd-4e72-87c6-5014302ba6bd",
+      "name": "Fetch Repo Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        272
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "githubApi": {
+          "id": "iUWQaqPlnAjlkmps",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SsaprlvvEN5l4yAM",
+          "cachedResultName": "repo_metadata_cache"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cache_key",
+              "keyValue": "={{ $('Evaluate Cache').item.json.cacheKey }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "cache_key": "={{ $('Evaluate Cache').item.json.cacheKey }}",
+            "organization": "={{ $('Validate Input').item.json.organization }}",
+            "repository": "={{ $('Validate Input').item.json.repository }}",
+            "default_branch": "={{ $json.default_branch }}",
+            "metadata_json": "={{ JSON.stringify($json) }}",
+            "cached_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "cache_key",
+              "displayName": "cache_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "organization",
+              "displayName": "organization",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "repository",
+              "displayName": "repository",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "default_branch",
+              "displayName": "default_branch",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "metadata_json",
+              "displayName": "metadata_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cached_at",
+              "displayName": "cached_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9a0ffd2e-42c3-45c8-a6c2-8f0664bbd987",
+      "name": "Upsert Metadata Cache",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inItems = $input.all().map(i => i.json);\nconst commit = inItems[0] || {};\nconst v = $('Validate Input').first().json;\nconst files = Array.isArray(commit.files) ? commit.files : [];\nconst ignoreExt = ['.png','.jpg','.jpeg','.gif','.svg','.ico','.webp','.bmp','.pdf','.zip','.exe','.dll','.woff','.woff2','.ttf','.eot','.mp4','.mov','.gz','.tar'];\nconst ignoreNames = ['package-lock.json','yarn.lock','pnpm-lock.yaml','gemfile.lock','composer.lock','poetry.lock','cargo.lock'];\nconst ignoreDirs = ['node_modules/','dist/','build/','vendor/','bin/','obj/','.next/','out/','.git/'];\nconst ignorePatterns = ['.min.js','.min.css','.g.cs','.designer.cs','.generated.','.snap'];\nconst kept = [];\nfor (const f of files) {\n  const name = (f.filename || '').toLowerCase();\n  if (!name) continue;\n  if (!f.patch) continue;\n  let skip = false;\n  for (const e of ignoreExt) { if (name.endsWith(e)) { skip = true; break; } }\n  if (!skip) { const bn = name.split('/').pop(); for (const n of ignoreNames) { if (bn === n) { skip = true; break; } } }\n  if (!skip) { for (const d of ignoreDirs) { if (name.indexOf(d) !== -1) { skip = true; break; } } }\n  if (!skip) { for (const p of ignorePatterns) { if (name.indexOf(p) !== -1) { skip = true; break; } } }\n  if (skip) continue;\n  kept.push({ filename: f.filename, status: f.status, additions: f.additions || 0, deletions: f.deletions || 0, patch: f.patch });\n}\nconst author = (commit.commit && commit.commit.author) ? commit.commit.author.name : '';\nconst message = (commit.commit && commit.commit.message) ? commit.commit.message : '';\nconst sha = commit.sha || v.commitSha;\nreturn [{ json: {\n  repository: v.repository, organization: v.organization, branch: v.branch,\n  commitSha: v.commitSha, pullRequestNumber: v.pullRequestNumber,\n  author, message, sha, keptFiles: kept, hasFiles: kept.length > 0\n} }];"
+      },
+      "id": "afebb3cb-6dad-4ef6-aac6-2ea270a96270",
+      "name": "Extract Changed Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst files = Array.isArray(d.keptFiles) ? d.keptFiles.slice() : [];\nfiles.sort((a, b) => ((b.additions || 0) + (b.deletions || 0)) - ((a.additions || 0) + (a.deletions || 0)));\nconst CAP = 12000;\nconst NL = String.fromCharCode(10);\nlet ctx = '';\nlet truncated = false;\nfor (const f of files) {\n  const header = 'FILE: ' + f.filename + ' (' + f.status + ', +' + (f.additions || 0) + '/-' + (f.deletions || 0) + ')';\n  const block = header + NL + (f.patch || '') + NL + NL;\n  if (ctx.length + block.length > CAP) {\n    const remaining = CAP - ctx.length;\n    if (remaining > 200) { ctx += block.substring(0, remaining) + NL + '...[truncated]'; }\n    truncated = true;\n    break;\n  }\n  ctx += block;\n}\nreturn [{ json: {\n  codeContext: ctx, hasFiles: (d.hasFiles && ctx.length > 0), truncated,\n  repository: d.repository, organization: d.organization, branch: d.branch,\n  commitSha: d.commitSha, pullRequestNumber: d.pullRequestNumber,\n  author: d.author, message: d.message\n} }];"
+      },
+      "id": "14aef619-ab7d-4986-9bdf-85194eb6d6b3",
+      "name": "Build AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hf",
+              "leftValue": "={{ $json.hasFiles }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3a0d6f79-7979-44cf-a2ba-2934ce5d8c7d",
+      "name": "Has Reviewable Files?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2464,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\nconst codeContext = ctx.codeContext || '';\nconst repository = ctx.repository || '';\nconst commitSha = ctx.commitSha || '';\nconst base = ' Analyze ONLY the provided diff. Respond with a JSON object containing: score (integer 0-100), issues (array of objects with title, severity one of critical|high|medium|low, detail, recommendation, file), recommendations (array of strings), positiveFindings (array of strings). Be specific and concise.';\n// EXTENSION POINT: add a new reviewer by appending one entry below.\nconst reviewers = [\n  { reviewerKey: 'architecture', reviewerName: 'Architecture Reviewer', scored: true, focus: 'Clean Architecture, Layering, CQRS, DDD, Vertical Slice, Dependency Injection, Repository Pattern' },\n  { reviewerKey: 'solid', reviewerName: 'SOLID Reviewer', scored: true, focus: 'SRP, OCP, LSP, ISP, DIP' },\n  { reviewerKey: 'performance', reviewerName: 'Performance Reviewer', scored: true, focus: 'Database queries, LINQ, memory allocations, loops, async, caching, algorithmic complexity' },\n  { reviewerKey: 'security', reviewerName: 'Security Reviewer', scored: true, focus: 'OWASP Top 10, authentication, authorization, SQL injection, XSS, secrets, input validation, output encoding, logging sensitive data' },\n  { reviewerKey: 'quality', reviewerName: 'Code Quality Reviewer', scored: true, focus: 'Naming, readability, maintainability, magic numbers, duplicate code, large methods, large classes, code smells' },\n  { reviewerKey: 'database', reviewerName: 'Database Reviewer', scored: true, focus: 'EF Core, transactions, AsNoTracking, indexes, SaveChanges, N+1 queries, query optimization' },\n  { reviewerKey: 'testing', reviewerName: 'Testing Reviewer', scored: true, focus: 'Unit tests, integration tests, coverage estimation, mockability' },\n  { reviewerKey: 'api', reviewerName: 'API Reviewer', scored: true, focus: 'REST, DTOs, validation, status codes, pagination, filtering, versioning' },\n  { reviewerKey: 'positive', reviewerName: 'Positive Reviewer', scored: false, focus: 'Good practices, reusable code, good architecture, optimizations. Never return only negative feedback.' }\n];\nreturn reviewers.map(function (r) {\n  const scoreNote = r.scored ? '' : ' Do NOT include a numeric score; set positiveFindings only.';\n  const systemPrompt = 'You are the ' + r.reviewerName + ', an expert .NET/C# code reviewer. Focus areas: ' + r.focus + '.' + base + scoreNote;\n  return { json: { reviewerKey: r.reviewerKey, reviewerName: r.reviewerName, scored: r.scored, systemPrompt, codeContext, repository, commitSha } };\n});"
+      },
+      "id": "86c82c82-1065-46cb-9750-7e01618bec5f",
+      "name": "Build Reviewer Configs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "f5rjg9ArbgyCu49m",
+          "cachedResultName": "AI Code Review — Reviewer Agent (reusable)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reviewerKey": "={{ $json.reviewerKey }}",
+            "reviewerName": "={{ $json.reviewerName }}",
+            "systemPrompt": "={{ $json.systemPrompt }}",
+            "scored": "={{ $json.scored }}",
+            "codeContext": "={{ $json.codeContext }}",
+            "repository": "={{ $json.repository }}",
+            "commitSha": "={{ $json.commitSha }}"
+          },
+          "schema": [
+            {
+              "id": "reviewerKey",
+              "displayName": "reviewerKey",
+              "required": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reviewerName",
+              "displayName": "reviewerName",
+              "required": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "systemPrompt",
+              "displayName": "systemPrompt",
+              "required": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scored",
+              "displayName": "scored",
+              "required": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "codeContext",
+              "displayName": "codeContext",
+              "required": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "repository",
+              "displayName": "repository",
+              "required": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "commitSha",
+              "displayName": "commitSha",
+              "required": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "4ab22dc7-7b06-4db7-a8e2-e578a22b96b4",
+      "name": "Run Reviewer Agents",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2912,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json).filter(r => r && r.reviewerKey);\nconst weights = { architecture: 0.20, security: 0.20, performance: 0.15, quality: 0.15, solid: 0.10, testing: 0.10, database: 0.05, api: 0.05 };\nconst scores = {};\nconst seenIssues = {};\nconst issues = [];\nconst recsSet = {};\nconst recommendations = [];\nconst positiveFindings = [];\nfor (const r of results) {\n  if (r.reviewerKey && typeof r.score === 'number' && weights[r.reviewerKey] !== undefined) { scores[r.reviewerKey] = r.score; }\n  const rIssues = Array.isArray(r.issues) ? r.issues : [];\n  for (const is of rIssues) {\n    const key = ((is.title || '') + '|' + (is.file || '')).toLowerCase().trim();\n    if (!seenIssues[key]) { seenIssues[key] = true; issues.push({ title: is.title || '', severity: (is.severity || 'medium'), detail: is.detail || '', recommendation: is.recommendation || '', file: is.file || '', reviewer: r.reviewerKey }); }\n  }\n  const rRecs = Array.isArray(r.recommendations) ? r.recommendations : [];\n  for (const rec of rRecs) { const k = String(rec).toLowerCase().trim(); if (rec && !recsSet[k]) { recsSet[k] = true; recommendations.push(rec); } }\n  const rPos = Array.isArray(r.positiveFindings) ? r.positiveFindings : [];\n  for (const p of rPos) { if (p) positiveFindings.push(p); }\n}\nconst scoreKeys = ['architecture','solid','security','performance','quality','database','testing','api'];\nconst finalScores = {};\nfor (const k of scoreKeys) { finalScores[k] = (typeof scores[k] === 'number') ? scores[k] : null; }\nlet wsum = 0; let acc = 0;\nfor (const k of Object.keys(weights)) { if (typeof scores[k] === 'number') { acc += scores[k] * weights[k]; wsum += weights[k]; } }\nconst overallScore = wsum > 0 ? Math.round(acc / wsum) : null;\nconst sevRank = { critical: 0, high: 1, medium: 2, low: 3 };\nissues.sort((a, b) => (sevRank[(a.severity || 'medium').toLowerCase()] ?? 2) - (sevRank[(b.severity || 'medium').toLowerCase()] ?? 2));\nlet risk = 'Unknown'; let debt = 'Unknown';\nif (overallScore !== null) { if (overallScore >= 85) { risk = 'Low'; debt = 'Low'; } else if (overallScore >= 70) { risk = 'Medium'; debt = 'Medium'; } else { risk = 'High'; debt = 'High'; } }\nconst nextActions = recommendations.slice(0, 5);\nreturn [{ json: { scores: finalScores, overallScore, risk, technicalDebt: debt, issues, recommendations, positiveFindings, nextActions, reviewerCount: results.length } }];"
+      },
+      "id": "556e5740-33c4-4592-a792-f78025aca952",
+      "name": "Aggregate Findings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior engineering reviewer. Based on the aggregated multi-agent code review data below, produce two summaries.\n\nRules:\n- executiveSummary: suitable for a Team Lead, MAXIMUM 10 sentences, covers overall quality, risk, and the most important issues.\n- developerSummary: friendly, actionable, and concrete; reference specific findings and next steps.\n\nAGGREGATED REVIEW DATA (JSON):\n{{ JSON.stringify($json) }}",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "id": "5251738a-d011-4b31-92c7-7a40ec62248b",
+      "name": "Generate Summaries",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        3360,
+        112
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"executiveSummary\":\"A concise summary for a team lead (max 10 sentences).\",\"developerSummary\":\"A friendly, actionable, concrete summary for the developer.\"}"
+      },
+      "id": "b5f8ab43-4503-4bb7-83bf-ab4133021027",
+      "name": "Summary Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3504,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const agg = $('Aggregate Findings').first().json;\nconst sum = $input.first().json;\nconst parsed = (sum && sum.output) ? sum.output : {};\nconst exec = parsed.executiveSummary || '';\nconst dev = parsed.developerSummary || '';\nconst v = $('Validate Input').first().json;\nconst response = {\n  repository: v.repository,\n  commit: v.commitSha,\n  overallScore: agg.overallScore,\n  risk: agg.risk,\n  technicalDebt: agg.technicalDebt,\n  scores: agg.scores,\n  positiveFindings: agg.positiveFindings,\n  issues: agg.issues,\n  recommendations: agg.recommendations,\n  nextActions: agg.nextActions\n};\nconst prNum = (v.pullRequestNumber === null || v.pullRequestNumber === undefined) ? '' : String(v.pullRequestNumber);\nconst log = {\n  organization: v.organization, repository: v.repository, branch: v.branch,\n  commit_sha: v.commitSha, pull_request_number: prNum,\n  overall_score: (typeof agg.overallScore === 'number') ? agg.overallScore : 0,\n  risk: agg.risk || '', summary: exec\n};\nreturn [{ json: { response, log, executiveSummary: exec, developerSummary: dev } }];"
+      },
+      "id": "8d025732-51a6-4bbd-92a4-4207b86daed5",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ABBIGbLXHbKRJcG8",
+          "cachedResultName": "code_review_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "execution_id": "={{ $execution.id }}",
+            "organization": "={{ $json.log.organization }}",
+            "repository": "={{ $json.log.repository }}",
+            "branch": "={{ $json.log.branch }}",
+            "commit_sha": "={{ $json.log.commit_sha }}",
+            "pull_request_number": "={{ $json.log.pull_request_number }}",
+            "overall_score": "={{ $json.log.overall_score }}",
+            "risk": "={{ $json.log.risk }}",
+            "status": "success",
+            "summary": "={{ $json.log.summary }}",
+            "logged_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "organization",
+              "displayName": "organization",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "repository",
+              "displayName": "repository",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "branch",
+              "displayName": "branch",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "commit_sha",
+              "displayName": "commit_sha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "pull_request_number",
+              "displayName": "pull_request_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "overall_score",
+              "displayName": "overall_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "risk",
+              "displayName": "risk",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "logged_at",
+              "displayName": "logged_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "398de5d4-1937-4ceb-b6f5-a215515b029b",
+      "name": "Log Run",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3936,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "1330b7f9-cb9a-47ca-8735-84853c06c22d",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3936,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ repository: $json.repository, commit: $json.commitSha, overallScore: null, risk: \"Unknown\", technicalDebt: \"Unknown\", scores: {}, positiveFindings: [], issues: [], recommendations: [\"No reviewable code files found in this commit after filtering.\"], nextActions: [] }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e835c971-ab64-4a7e-aae0-6cab34625f73",
+      "name": "Respond No Files",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## AI GitHub Code Review System\n\nWebhook-triggered orchestrator that reviews a GitHub commit/PR with 9 specialized AI agents.\n\n**Pipeline:** validate → cached repo metadata → fetch commit → filter files → chunk context → fan out to 9 reviewers (reusable sub-workflow) → aggregate → weighted score → summaries → JSON response.\n\n**POST** `/webhook/github-code-review`\nBody: `{ organization, repository, branch, commitSha, pullRequestNumber }`",
+        "height": 300,
+        "width": 480,
+        "color": 4
+      },
+      "id": "70f5a14f-c6fd-4a92-9429-29083e1c87c0",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1968,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Extend with new reviewers\n\nAdd a new specialized agent by appending ONE entry to the array in **Build Reviewer Configs** (reviewerKey, reviewerName, scored, focus). No other node changes are needed — the reusable sub-workflow handles any reviewer generically.\n\nAdd its weight in **Aggregate Findings** if it should affect the overall score.",
+        "height": 240,
+        "width": 380,
+        "color": 6
+      },
+      "id": "945a81c8-53d6-463f-afd3-70dcd691a250",
+      "name": "Extension Point",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## GitHub access: REST API (with MCP swap-in)\n\nThis workflow uses the **GitHub REST API** via HTTP Request (githubApi credential) because no GitHub MCP server is configured on this instance.\n\n**To use GitHub MCP instead:** replace **Fetch Repo Metadata** / **Fetch Commit** with an MCP Client Tool node (n8n-nodes-mcp) pointed at your GitHub MCP server, keeping the same output fields the downstream Code nodes expect (commit.author, commit.message, files[]).\n\nHTTP nodes retry 3× with backoff to absorb GitHub rate limits.",
+        "height": 280,
+        "width": 420,
+        "color": 3
+      },
+      "id": "7c03226d-8483-4cf9-8b88-fb5b9479e44a",
+      "name": "GitHub / MCP",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2624,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "model": "mistral-small-2603",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatMistralCloud",
+      "typeVersion": 1,
+      "position": [
+        3392,
+        272
+      ],
+      "id": "77774bc2-f998-40bd-ab9c-102a53ab9ae8",
+      "name": "Mistral Cloud Chat Model",
+      "credentials": {
+        "mistralCloudApi": {
+          "id": "4hMJwatu7q37LAF0",
+          "name": "Mistral Cloud account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Review Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Valid Input?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Input?": {
+      "main": [
+        [
+          {
+            "node": "Get Cached Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Cached Metadata": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Cache": {
+      "main": [
+        [
+          {
+            "node": "Cache Fresh?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cache Fresh?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Commit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Repo Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Commit": {
+      "main": [
+        [
+          {
+            "node": "Extract Changed Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Repo Metadata": {
+      "main": [
+        [
+          {
+            "node": "Upsert Metadata Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Metadata Cache": {
+      "main": [
+        [
+          {
+            "node": "Fetch Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Changed Files": {
+      "main": [
+        [
+          {
+            "node": "Build AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Context": {
+      "main": [
+        [
+          {
+            "node": "Has Reviewable Files?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Reviewable Files?": {
+      "main": [
+        [
+          {
+            "node": "Build Reviewer Configs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond No Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reviewer Configs": {
+      "main": [
+        [
+          {
+            "node": "Run Reviewer Agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Reviewer Agents": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Findings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Findings": {
+      "main": [
+        [
+          {
+            "node": "Generate Summaries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summaries": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generate Summaries",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Log Run",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mistral Cloud Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Summaries",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WLKawlkGhMsifRcq"
+  },
+  "versionId": "36b5f736-9228-489a-a96c-27b974c077fa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fc7167264fd6f835f81ebe5f9abd917213c774a7ebff808cc0d8a73b9e51e8a8"
+  },
+  "nodeGroups": [],
+  "id": "W7Ym3DFIg0zYPXNO",
+  "tags": []
+}
